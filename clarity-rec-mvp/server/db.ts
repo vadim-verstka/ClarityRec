@@ -6,8 +6,11 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const dbPath = join(__dirname, '..', 'clarity-rec.db');
+// Путь к базе данных берем из переменной окружения или используем default для volume
+const dbPath = process.env.DB_PATH || join(__dirname, '..', 'data', 'clarityrec.db');
 const db = new Database(dbPath);
+
+console.log(`📁 База данных: ${dbPath}`);
 
 // Инициализация таблиц
 db.exec(`
