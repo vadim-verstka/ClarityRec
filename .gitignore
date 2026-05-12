@@ -1,0 +1,54 @@
+```
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+target/
+
+# TypeScript/Vue build artifacts
+*.tsbuildinfo
+.vite/
+
+# Environment variables
+.env
+.env.local
+*.env.*
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+
+# Python cache (if any Python parts added later)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Distribution / packaging
+*.tar.gz
+*.zip
+
+# Docker related (if applicable)
+.dockerenv
+!Dockerfile
+!docker-compose.yml
+
+# OS generated files
+.DS_Store
+Thumbs.db
+```
