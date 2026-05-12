@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import jwt from '@fastify/jwt';
 import bcrypt from 'bcrypt';
 import db from './db.js';
 
@@ -12,7 +13,7 @@ fastify.register(cors, {
 });
 
 // Регистрация JWT
-fastify.register(require('@fastify/jwt'), {
+fastify.register(jwt, {
   secret: process.env.JWT_SECRET || 'clarity-rec-secret-key-mvp-2024'
 });
 
