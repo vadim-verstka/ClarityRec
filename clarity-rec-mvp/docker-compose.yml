@@ -11,6 +11,7 @@ services:
     environment:
       - NODE_ENV=production
       - JWT_SECRET=clarity-rec-secret-key-mvp-2024
+      - DB_PATH=/app/data/clarityrec.db
     volumes:
       - db-data:/app/data
     restart: unless-stopped
