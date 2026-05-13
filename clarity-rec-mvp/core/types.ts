@@ -40,6 +40,7 @@ export interface RecommendationItem {
   item_id: string;
   score: number;
   feature_impacts: FeatureImpact[];
+  categories?: string[];
 }
 
 export interface RecommendationResponse {
@@ -70,6 +71,12 @@ export interface CatalogSyncResponse {
 }
 
 // Профиль пользователя (в памяти)
+export interface UserEvent {
+  item_id: string;
+  event_type: EventType;
+  timestamp: Date;
+}
+
 export interface UserProfile {
   user_id: string;
   category_weights: Record<string, number>;
@@ -78,6 +85,7 @@ export interface UserProfile {
   events_count: number;
   likes_count: number;
   last_updated: Date;
+  events: UserEvent[];
 }
 
 // Вектор для вычислений

@@ -54,7 +54,7 @@ export const likesApi = {
 };
 
 export const recommendationsApi = {
-  get: () => api.get('/recommend'),
+  get: () => api.get('/recommendations'),
   getExplanation: () => api.get('/explain')
 };
 

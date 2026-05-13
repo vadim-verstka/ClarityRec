@@ -214,7 +214,7 @@ fastify.get('/api/likes/count', {
 // ==================== RECOMMENDATIONS (заглушка под будущий XAI) ====================
 
 // Получение персональных рекомендаций через ClarityRec Core
-fastify.get('/api/recommend', {
+fastify.get('/api/recommendations', {
   preHandler: [fastify.authenticate]
 }, async (request, reply) => {
   const user = request.user as any;
