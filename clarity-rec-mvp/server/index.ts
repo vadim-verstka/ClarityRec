@@ -148,15 +148,12 @@ fastify.post('/api/likes', {
     // Отправляем событие в ClarityRec Core
     try {
       await axios.post(`${CORE_SERVICE_URL}/api/v1/events`, {
+        api_key: API_KEY,
         user_id: `user_${user.id}`,
         item_id: `card_${cardId}`,
         event_type: 'like',
         metadata: {
           category: card.category
-        }
-      }, {
-        headers: {
-          'X-API-Key': API_KEY
         }
       });
       fastify.log.info(`Событие лайка отправлено в ClarityRec Core для пользователя ${user.id}`);
@@ -183,11 +180,8 @@ fastify.post('/api/likes', {
         }));
         
         await axios.post(`${CORE_SERVICE_URL}/api/v1/catalog/sync`, {
+          api_key: API_KEY,
           items: catalogItems
-        }, {
-          headers: {
-            'X-API-Key': API_KEY
-          }
         });
         fastify.log.info(`Каталог синхронизирован с ClarityRec Core (${catalogItems.length} элементов)`);
       } catch (syncError: any) {
@@ -237,15 +231,12 @@ fastify.get('/api/recommendations', {
   try {
     // Запрашиваем рекомендации у ClarityRec Core
     const coreResponse = await axios.post(`${CORE_SERVICE_URL}/api/v1/recommend`, {
+      api_key: API_KEY,
       user_id: `user_${user.id}`,
       limit: 10,
       context: {
         device: 'web',
         role: 'user'
-      }
-    }, {
-      headers: {
-        'X-API-Key': API_KEY
       }
     });
 
@@ -294,7 +285,7 @@ fastify.get('/api/recommendations', {
   } catch (coreError: any) {
     fastify.log.error(`Ошибка при получении рекомендаций из ClarityRec Core: ${coreError.message}`);
     
-    // Fallback: возвращаем популярные карточки на основе лайков пользователя
+    // Fallback: возвращаем карточки из всех лайкнутых категорий + случайные из нелайкнутых
     const likedCategories = db.prepare(`
       SELECT c.category, COUNT(*) as cnt 
       FROM likes l 
@@ -304,20 +295,51 @@ fastify.get('/api/recommendations', {
       ORDER BY cnt DESC
     `).all(user.id) as Array<{ category: string; cnt: number }>;
 
-    const topCategory = likedCategories[0]?.category;
+    const likedCategoryNames = likedCategories.map(lc => lc.category);
+    const resultCards: any[] = [];
     
-    const fallbackCards = db.prepare(`
-      SELECT id, title, category, image_url 
-      FROM cards 
-      WHERE category = ? 
-      AND id NOT IN (SELECT card_id FROM likes WHERE user_id = ?)
-      LIMIT 10
-    `).all(topCategory || 'Технологии', user.id) as any[];
+    // Добавляем карточки из каждой лайкнутой категории (отсортированы по количеству лайков)
+    for (const lc of likedCategories) {
+      const categoryCards = db.prepare(`
+        SELECT id, title, category, image_url 
+        FROM cards 
+        WHERE category = ? 
+        AND id NOT IN (SELECT card_id FROM likes WHERE user_id = ?)
+        LIMIT 2
+      `).all(lc.category, user.id) as any[];
+      
+      resultCards.push(...categoryCards);
+    }
+    
+    // Добавляем 1-2 случайные карточки из нелайкнутых категорий
+    if (likedCategoryNames.length > 0) {
+      const placeholders = likedCategoryNames.map(() => '?').join(',');
+      const randomCards = db.prepare(`
+        SELECT id, title, category, image_url 
+        FROM cards 
+        WHERE category NOT IN (${placeholders})
+        AND id NOT IN (SELECT card_id FROM likes WHERE user_id = ?)
+        ORDER BY RANDOM()
+        LIMIT 2
+      `).all(...likedCategoryNames, user.id) as any[];
+      
+      resultCards.push(...randomCards);
+    } else {
+      // Если нет лайкнутых категорий, берём случайные карточки
+      const randomCards = db.prepare(`
+        SELECT id, title, category, image_url 
+        FROM cards 
+        ORDER BY RANDOM()
+        LIMIT 10
+      `).all() as any[];
+      
+      resultCards.push(...randomCards);
+    }
 
     return {
       ready: true,
       message: 'Рекомендации сформированы (fallback режим)',
-      recommendations: fallbackCards.map(card => ({
+      recommendations: resultCards.map(card => ({
         ...card,
         score: 0.5,
         explanation: 'Рекомендовано на основе ваших предпочтений',
@@ -345,15 +367,12 @@ fastify.get('/api/explain', {
   try {
     // Получаем последние рекомендации для объяснения
     const coreResponse = await axios.post(`${CORE_SERVICE_URL}/api/v1/recommend`, {
+      api_key: API_KEY,
       user_id: `user_${user.id}`,
       limit: 5,
       context: {
         device: 'web',
         role: 'user'
-      }
-    }, {
-      headers: {
-        'X-API-Key': API_KEY
       }
     });
 
