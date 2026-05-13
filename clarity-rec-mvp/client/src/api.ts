@@ -53,6 +53,11 @@ export const likesApi = {
   getCount: () => api.get('/likes/count')
 };
 
+export const recommendationsApi = {
+  get: () => api.get('/recommend'),
+  getExplanation: () => api.get('/explain')
+};
+
 export const recommendApi = {
   getRecommendations: () => api.get('/recommend'),
   getExplanation: () => api.get('/explain')
