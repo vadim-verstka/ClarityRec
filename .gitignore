@@ -19,49 +19,4 @@ target/
 # Editors
 .vscode/
 .idea/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.sqlite
-*.sqlite3
-.pytest_cache/
-.mypy_cache/
-.hypothesis/
-
-# Node.js
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-node_modules/
-dist/
-build/
-.nyc_output
-coverage/
-.nyc_output/
-coverage/
-
-# TypeScript
-*.tsbuildinfo
-.next/
-out/
-
-# General
-.DS_Store
-Thumbs.db
 ```
