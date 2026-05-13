@@ -51,7 +51,7 @@ export function calculateFeatureImpacts(
     const impact = profileWeight * itemWeight;
     
     if (impact !== 0) {
-      // Определяем тип признака
+      // Определяем читаемое имя признака
       let name = key;
       if (key.startsWith('cat_')) {
         name = `Категория: ${key.substring(4)}`;

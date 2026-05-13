@@ -1,37 +1,23 @@
 ```
 # Dependencies
 node_modules/
+package-lock.json
 
-# Build outputs
-dist/
-build/
-target/
-
-# TypeScript/JavaScript
-*.tsbuildinfo
-*.js.map
-*.jsx.map
-*.ts.map
-
-# Environment variables
+# Environment
 .env
 .env.local
-*.env.*
+.env.*
 
-# Logs
+# Logs and temp files
 *.log
+*.tmp
+*.swp
 
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# IDE files
+# Editors
 .vscode/
 .idea/
-*.swp
-*.swo
 
-# Python (if co-existing)
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -39,13 +25,5 @@ __pycache__/
 .Python
 venv/
 .venv/
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Temporary files
-*.tmp
-*.temp
+.env
 ```
