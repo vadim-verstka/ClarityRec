@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import {
   ExplanationRequest,
   ExplanationResponse,
@@ -14,6 +14,13 @@ import {
   TextExplanation,
   UserJourneyStep
 } from './types';
+
+/**
+ * Генерация UUID v4 с использованием встроенного crypto модуля
+ */
+function generateUUID(): string {
+  return crypto.randomUUID();
+}
 
 /**
  * Генератор объяснений для системы рекомендаций
@@ -49,7 +56,7 @@ export class ExplanationEngine {
     const latency = Date.now() - startTime;
 
     return {
-      request_id: uuidv4(),
+      request_id: generateUUID(),
       user_id: request.user_id,
       text_explanation: textExplanation,
       visualizations: visualizations,

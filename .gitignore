@@ -2,17 +2,6 @@
 # Dependencies
 node_modules/
 
-# Build outputs
-dist/
-build/
-target/
-
-# TypeScript/JavaScript
-*.tsbuildinfo
-*.js.map
-*.jsx.map
-*.ts.map
-
 # Environment
 .env
 .env.local
@@ -21,7 +10,12 @@ target/
 # Logs
 *.log
 
-# Editor/IDE
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# IDE
 .vscode/
 .idea/
 *.swp
@@ -32,61 +26,38 @@ target/
 .DS_Store
 Thumbs.db
 
-# Coverage
-coverage/
-htmlcov/
-.coverage
+# Build outputs
+dist/
+build/
+target/
+*.out
 
-# Python (if present)
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-env/
-venv/
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.nox/
-.pytest_cache/
-.mypy_cache/
-.hypothesis/
-
-# Java (if present)
-*.class
-*.jar
-*.war
-*.ear
-*.nar
-hs_err_pid*
-.recommenders
-
-# Go (if present)
-*.exe
-*.dll
 *.so
-*.dylib
-*.test
-*.prof
-go.exe
-a.out
+*.egg-info/
+.eggs/
 
-# C/C++ (if present)
-*.o
-*.a
-*.obj
-*.out
-*.exe
-*.dll
-*.so
-*.dylib
-*.dSYM
-*.gem
+# Node.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Compressed files
+# Compiled JavaScript
+*.js.map
+*.ts.map
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Compression
 *.zip
 *.gz
 *.tar
