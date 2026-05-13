@@ -3,7 +3,7 @@ FROM node:20-alpine AS build-stage
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --only=production=false
+RUN npm ci
 
 COPY . .
 
@@ -14,7 +14,7 @@ FROM node:20-alpine AS production-stage
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --production
 
 COPY --from=build-stage /app/dist ./dist
 COPY --from=build-stage /app/node_modules ./node_modules

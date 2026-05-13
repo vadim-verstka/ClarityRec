@@ -3,7 +3,7 @@ FROM node:20 AS build-stage
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --only=production=false
+RUN npm ci
 
 COPY . .
 
