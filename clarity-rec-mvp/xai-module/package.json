@@ -1,0 +1,31 @@
+{
+  "name": "clarityrec-xai-module",
+  "version": "1.0.0",
+  "description": "Независимый адаптивный модуль визуализации объяснений работы алгоритмов рекомендаций (XAI)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "xai",
+    "explainable-ai",
+    "recommendations",
+    "visualization"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@fastify/cors": "^8.5.0",
+    "@types/uuid": "^10.0.0",
+    "axios": "^1.6.2",
+    "fastify": "^4.24.3",
+    "uuid": "^14.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.41",
+    "typescript": "^5.3.3"
+  }
+}

@@ -349,7 +349,7 @@ fastify.get('/api/recommendations', {
   }
 });
 
-// Получение объяснения рекомендаций через ClarityRec Core (XAI)
+// Получение объяснения рекомендаций через XAI Module
 fastify.get('/api/explain', {
   preHandler: [fastify.authenticate]
 }, async (request, reply) => {
@@ -365,91 +365,106 @@ fastify.get('/api/explain', {
   }
 
   try {
-    // Получаем последние рекомендации для объяснения
-    const coreResponse = await axios.post(`${CORE_SERVICE_URL}/api/v1/recommend`, {
-      api_key: API_KEY,
-      user_id: `user_${user.id}`,
-      limit: 5,
-      context: {
-        device: 'web',
-        role: 'user'
+    // Запрашиваем объяснение из XAI Module
+    const xaiResponse = await axios.get(`${process.env.XAI_MODULE_URL || 'http://clarity-rec-xai-module:3002'}/api/explain/user_${user.id}`, {
+      headers: {
+        'Content-Type': 'application/json'
       }
     });
 
-    const recommendations = coreResponse.data.recommendations || [];
+    return xaiResponse.data;
+  } catch (xaiError: any) {
+    fastify.log.warn(`XAI Module недоступен (${xaiError.message}), используем fallback`);
     
-    // Анализируем feature_impacts для формирования общего объяснения
-    const allImpacts: Record<string, number> = {};
-    recommendations.forEach((rec: any) => {
-      if (rec.feature_impacts) {
-        rec.feature_impacts.forEach((imp: any) => {
-          if (imp.direction === 'positive') {
-            allImpacts[imp.name] = (allImpacts[imp.name] || 0) + imp.weight;
-          }
-        });
+    // Fallback: получаем рекомендации из Core и формируем объяснение локально
+    try {
+      const coreResponse = await axios.post(`${CORE_SERVICE_URL}/api/v1/recommend`, {
+        api_key: API_KEY,
+        user_id: `user_${user.id}`,
+        limit: 5,
+        context: {
+          device: 'web',
+          role: 'user'
+        }
+      });
+
+      const recommendations = coreResponse.data.recommendations || [];
+      
+      // Анализируем feature_impacts для формирования общего объяснения
+      const allImpacts: Record<string, number> = {};
+      recommendations.forEach((rec: any) => {
+        if (rec.feature_impacts) {
+          rec.feature_impacts.forEach((imp: any) => {
+            if (imp.direction === 'positive') {
+              allImpacts[imp.name] = (allImpacts[imp.name] || 0) + imp.weight;
+            }
+          });
+        }
+      });
+
+      // Сортируем факторы по весу
+      const sortedFactors = Object.entries(allImpacts)
+        .map(([name, weight]) => ({ name, weight: weight / recommendations.length }))
+        .sort((a, b) => b.weight - a.weight);
+
+      // Формируем текстовое объяснение
+      let explanationText = 'Наши рекомендации основаны на анализе ваших предпочтений. ';
+      if (sortedFactors.length > 0) {
+        const topFactors = sortedFactors.slice(0, 3).map(f => `${f.name} (${Math.round(f.weight * 100)}%)`);
+        explanationText += `Основные факторы: ${topFactors.join(', ')}. `;
       }
-    });
+      explanationText += 'Система проанализировала ваши лайки и подобрала контент, который соответствует вашим интересам.';
 
-    // Сортируем факторы по весу
-    const sortedFactors = Object.entries(allImpacts)
-      .map(([name, weight]) => ({ name, weight: weight / recommendations.length }))
-      .sort((a, b) => b.weight - a.weight);
+      // Получаем статистику по категориям
+      const categoryStats = db.prepare(`
+        SELECT c.category, COUNT(*) as cnt 
+        FROM likes l 
+        JOIN cards c ON l.card_id = c.id 
+        WHERE l.user_id = ? 
+        GROUP BY c.category 
+        ORDER BY cnt DESC
+      `).all(user.id) as Array<{ category: string; cnt: number }>;
 
-    // Формируем текстовое объяснение
-    let explanationText = 'Наши рекомендации основаны на анализе ваших предпочтений. ';
-    if (sortedFactors.length > 0) {
-      const topFactors = sortedFactors.slice(0, 3).map(f => `${f.name} (${Math.round(f.weight * 100)}%)`);
-      explanationText += `Основные факторы: ${topFactors.join(', ')}. `;
+      return {
+        explanation: explanationText,
+        factors: sortedFactors,
+        category_preferences: categoryStats,
+        meta: {
+          model_version: coreResponse.data.meta?.model_version || '1.0.0',
+          total_events: coreResponse.data.meta?.total_events || 0,
+          source: 'fallback'
+        }
+      };
+    } catch (coreError: any) {
+      fastify.log.error(`Ошибка при получении объяснения: ${coreError.message}`);
+      
+      // Полный fallback без Core
+      const categoryStats = db.prepare(`
+        SELECT c.category, COUNT(*) as cnt 
+        FROM likes l 
+        JOIN cards c ON l.card_id = c.id 
+        WHERE l.user_id = ? 
+        GROUP BY c.category 
+        ORDER BY cnt DESC
+      `).all(user.id) as Array<{ category: string; cnt: number }>;
+
+      const topCategory = categoryStats[0]?.category;
+
+      return {
+        explanation: `Наши рекомендации основаны на ваших предпочтениях. Вы проявили наибольший интерес к категории "${topCategory}". Система продолжит учиться на ваших действиях, чтобы улучшить рекомендации.`,
+        factors: [
+          { name: 'Частота лайков', weight: 0.4 },
+          { name: 'Разнообразие категорий', weight: 0.3 },
+          { name: 'Последняя активность', weight: 0.3 }
+        ],
+        category_preferences: categoryStats,
+        meta: {
+          model_version: 'fallback-1.0.0',
+          total_events: categoryStats.reduce((sum, s) => sum + s.cnt, 0),
+          source: 'local-fallback'
+        }
+      };
     }
-    explanationText += 'Система проанализировала ваши лайки и подобрала контент, который соответствует вашим интересам.';
-
-    // Получаем статистику по категориям
-    const categoryStats = db.prepare(`
-      SELECT c.category, COUNT(*) as cnt 
-      FROM likes l 
-      JOIN cards c ON l.card_id = c.id 
-      WHERE l.user_id = ? 
-      GROUP BY c.category 
-      ORDER BY cnt DESC
-    `).all(user.id) as Array<{ category: string; cnt: number }>;
-
-    return {
-      explanation: explanationText,
-      factors: sortedFactors,
-      category_preferences: categoryStats,
-      meta: {
-        model_version: coreResponse.data.meta?.model_version || '1.0.0',
-        total_events: coreResponse.data.meta?.total_events || 0
-      }
-    };
-  } catch (coreError: any) {
-    fastify.log.error(`Ошибка при получении объяснения из ClarityRec Core: ${coreError.message}`);
-    
-    // Fallback объяснение
-    const categoryStats = db.prepare(`
-      SELECT c.category, COUNT(*) as cnt 
-      FROM likes l 
-      JOIN cards c ON l.card_id = c.id 
-      WHERE l.user_id = ? 
-      GROUP BY c.category 
-      ORDER BY cnt DESC
-    `).all(user.id) as Array<{ category: string; cnt: number }>;
-
-    const topCategory = categoryStats[0]?.category;
-
-    return {
-      explanation: `Наши рекомендации основаны на ваших предпочтениях. Вы проявили наибольший интерес к категории "${topCategory}". Система продолжит учиться на ваших действиях, чтобы улучшить рекомендации.`,
-      factors: [
-        { name: 'Частота лайков', weight: 0.4 },
-        { name: 'Разнообразие категорий', weight: 0.3 },
-        { name: 'Последняя активность', weight: 0.3 }
-      ],
-      category_preferences: categoryStats,
-      meta: {
-        model_version: 'fallback-1.0.0',
-        total_events: categoryStats.reduce((sum, s) => sum + s.cnt, 0)
-      }
-    };
   }
 });
 

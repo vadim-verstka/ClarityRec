@@ -20,6 +20,7 @@ services:
       - db-data:/app/data
     depends_on:
       - clarityrec-core
+      - xai-module
     restart: unless-stopped
 
   # Микросервис рекомендаций ClarityRec Core
@@ -38,6 +39,29 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # XAI Module - независимый модуль визуализации объяснений
+  xai-module:
+    build:
+      context: ./xai-module
+      dockerfile: Dockerfile
+    container_name: clarity-rec-xai-module
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=production
+      - CORE_API_URL=http://clarityrec-core:3001
+      - API_KEY=clarity-rec-secret-key-2024
+      - PORT=3002
+      - HOST=0.0.0.0
+    depends_on:
+      - clarityrec-core
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3002/health"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -62,6 +86,7 @@ services:
       - backend
       - frontend
       - clarityrec-core
+      - xai-module
     restart: unless-stopped
 
 volumes:
