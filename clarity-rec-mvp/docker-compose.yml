@@ -47,6 +47,8 @@ services:
       context: ./client
       dockerfile: Dockerfile
     container_name: clarity-rec-frontend
+    ports:
+      - "5173:80"
     restart: unless-stopped
 
   nginx:
