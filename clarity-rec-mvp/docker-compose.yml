@@ -16,6 +16,7 @@ services:
       - CLARITYREC_API_KEY=clarity-rec-secret-key-2024
       - JWT_SECRET=super-secret-jwt-key-change-in-prod
       - PORT=3000
+      - XAI_MODULE_URL=http://clarity-rec-xai-module:3002
     volumes:
       - db-data:/app/data
     depends_on:
