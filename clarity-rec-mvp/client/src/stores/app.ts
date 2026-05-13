@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 
 export const useAppStore = defineStore('app', () => {
-  const cards = ref<Array<{ id: number; title: string; category: string; image_url: string }>>([]);
+  const cards = ref<Array<{ id: number; title: string; category: string; image_url: string; score?: number; explanation?: string; feature_impacts?: Array<{ name: string; weight: number; direction: string }> }>>([]);
   const likeCount = ref<number>(0);
   const isLoading = ref(false);
 

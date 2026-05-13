@@ -35,7 +35,7 @@ const router = createRouter({
 });
 
 // Guard для проверки авторизации
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore();
   
   // Инициализируем хранилище если ещё не сделано

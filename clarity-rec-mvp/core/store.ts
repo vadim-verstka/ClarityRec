@@ -22,7 +22,8 @@ class InMemoryStore {
         feature_weights: {},
         events_count: 0,
         likes_count: 0,
-        last_updated: new Date()
+        last_updated: new Date(),
+        events: []
       });
     }
     return this.users.get(userId)!;
@@ -72,6 +73,13 @@ class InMemoryStore {
     if (itemType === 'like') {
       profile.likes_count += 1;
     }
+    
+    // Добавляем событие в историю
+    profile.events.push({
+      item_id: '', // itemId будет установлен в routes.ts
+      event_type: itemType,
+      timestamp: new Date()
+    });
     
     profile.last_updated = new Date();
     

@@ -95,6 +95,7 @@ export function generateRecommendations(
   item_id: string;
   score: number;
   feature_impacts: FeatureImpact[];
+  categories: string[];
 }> {
   const startTime = Date.now();
   
@@ -112,8 +113,16 @@ export function generateRecommendations(
   // Получаем все элементы каталога
   const catalogItems = store.getAllCatalogItems();
   
-  // Исключаем элементы, которые пользователь уже лайкнул (если бы мы это отслеживали)
-  // Для простоты берем все элементы
+  // Собираем категории, которые пользователь лайкал
+  const likedCategories = new Set<string>();
+  profile.events.forEach(event => {
+    if (event.event_type === 'like') {
+      const item = catalogItems.find(i => i.item_id === event.item_id);
+      if (item) {
+        item.categories.forEach(cat => likedCategories.add(cat));
+      }
+    }
+  });
   
   // Вычисляем скор для каждого элемента
   const scoredItems = catalogItems.map(item => {
@@ -124,13 +133,34 @@ export function generateRecommendations(
     return {
       item_id: item.item_id,
       score: parseFloat(score.toFixed(6)),
-      feature_impacts
+      feature_impacts,
+      categories: item.categories
     };
   });
   
-  // Сортируем по убыванию скора
-  scoredItems.sort((a, b) => b.score - a.score);
+  // Разделяем на релевантные (из лайкнутых категорий) и новые
+  const relevantItems = scoredItems.filter(s => 
+    s.categories.some(cat => likedCategories.has(cat))
+  );
+  const newItems = scoredItems.filter(s => 
+    !s.categories.some(cat => likedCategories.has(cat))
+  );
+  
+  // Сортируем релевантные по скору
+  relevantItems.sort((a, b) => b.score - a.score);
+  
+  // Перемешиваем новые для случайности
+  for (let i = newItems.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newItems[i], newItems[j]] = [newItems[j], newItems[i]];
+  }
+  
+  // Формируем итоговую выдачу: релевантные + 2 случайных новых
+  const result = [
+    ...relevantItems,
+    ...newItems.slice(0, 2)
+  ];
   
   // Возвращаем топ-N
-  return scoredItems.slice(0, limit);
+  return result.slice(0, limit);
 }

@@ -174,7 +174,7 @@ export async function registerRoutes(fastify: FastifyInstance, apiKey: string) {
       }
       
       // Обновляем профиль пользователя
-      store.updateUserProfile(
+      const profile = store.updateUserProfile(
         user_id,
         event_type,
         item.categories,
@@ -182,8 +182,11 @@ export async function registerRoutes(fastify: FastifyInstance, apiKey: string) {
         item.features
       );
       
-      // Получаем обновленный профиль
-      const profile = store.getUserProfile(user_id);
+      // Обновляем item_id в последнем событии (т.к. в store.ts мы его не знали)
+      if (profile.events.length > 0) {
+        profile.events[profile.events.length - 1].item_id = item_id;
+      }
+      
       const isReady = store.isRecommendationReady(user_id);
       
       const latency = Date.now() - startTime;
