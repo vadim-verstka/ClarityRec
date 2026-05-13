@@ -6,6 +6,10 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
+
+# Явная установка typescript для работы tsc в alpine
+RUN npm install -D typescript
+
 RUN npm run build
 
 FROM node:20-alpine AS production-stage

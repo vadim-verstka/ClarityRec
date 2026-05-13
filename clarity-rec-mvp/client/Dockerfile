@@ -7,11 +7,11 @@ RUN npm install
 
 COPY . .
 
-# Явная переустановка vue-tsc для корректной работы
-RUN npm install --save-dev vue-tsc typescript
+# Явная переустановка vue-tsc и typescript для корректной работы
+RUN npm install --save-dev vue-tsc typescript && npm rebuild
 
-# Сборка проекта
-RUN npx vue-tsc --noEmit && npx vite build
+# Сборка проекта через прямой вызов node
+RUN node ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit && node ./node_modules/vite/bin/vite.js build
 
 FROM nginx:alpine AS production-stage
 
