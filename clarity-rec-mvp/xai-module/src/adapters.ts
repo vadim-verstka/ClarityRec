@@ -26,44 +26,66 @@ export class ClarityRecAdapter {
    */
   async getUserProfile(userId: string): Promise<UserProfileData> {
     try {
-      // В текущей версии ClarityRec не имеет endpoint для получения профиля
-      // Поэтому мы получаем его через рекомендации и события
-      const recommendations = await this.getRecommendations(userId, 5);
-      
-      // Анализируем feature_impacts из рекомендаций для восстановления профиля
-      const categoryWeights: Record<string, number> = {};
-      const tagWeights: Record<string, number> = {};
-      const featureWeights: Record<string, number> = {};
-
-      recommendations.forEach(rec => {
-        rec.feature_impacts.forEach(impact => {
-          if (impact.name.startsWith('Категория: ')) {
-            const catName = impact.name.replace('Категория: ', '');
-            categoryWeights[catName] = (categoryWeights[catName] || 0) + impact.weight;
-          } else if (impact.name.startsWith('Тег: ')) {
-            const tagName = impact.name.replace('Тег: ', '');
-            tagWeights[tagName] = (tagWeights[tagName] || 0) + impact.weight;
-          } else if (impact.name.startsWith('Признак: ')) {
-            const featName = impact.name.replace('Признак: ', '');
-            featureWeights[featName] = (featureWeights[featName] || 0) + impact.weight;
-          }
-        });
+      // Получаем профиль напрямую из нового endpoint
+      const profileResponse = await axios.get(`${this.baseUrl}/api/v1/users/${userId}/profile`, {
+        headers: {
+          'X-API-Key': this.apiKey,
+          'Content-Type': 'application/json'
+        }
       });
 
-      // Получаем события для подсчёта лайков
-      const events = await this.getUserEvents(userId);
-      const likesCount = events.filter(e => e.action === 'like').length;
+      const profileData = profileResponse.data;
 
       return {
         user_id: userId,
-        category_weights: categoryWeights,
-        tag_weights: tagWeights,
-        feature_weights: featureWeights,
-        events_count: events.length,
-        likes_count: likesCount
+        category_weights: profileData.category_weights || {},
+        tag_weights: profileData.tag_weights || {},
+        feature_weights: profileData.feature_weights || {},
+        events_count: profileData.events_count || 0,
+        likes_count: profileData.likes_count || 0
       };
     } catch (error: any) {
       console.error('Ошибка получения профиля:', error.message);
+      
+      // Fallback: анализируем рекомендации для восстановления профиля
+      try {
+        const recommendations = await this.getRecommendations(userId, 5);
+        
+        // Анализируем feature_impacts из рекомендаций для восстановления профиля
+        const categoryWeights: Record<string, number> = {};
+        const tagWeights: Record<string, number> = {};
+        const featureWeights: Record<string, number> = {};
+
+        recommendations.forEach(rec => {
+          rec.feature_impacts.forEach(impact => {
+            if (impact.name.startsWith('Категория: ')) {
+              const catName = impact.name.replace('Категория: ', '');
+              categoryWeights[catName] = (categoryWeights[catName] || 0) + impact.weight;
+            } else if (impact.name.startsWith('Тег: ')) {
+              const tagName = impact.name.replace('Тег: ', '');
+              tagWeights[tagName] = (tagWeights[tagName] || 0) + impact.weight;
+            } else if (impact.name.startsWith('Признак: ')) {
+              const featName = impact.name.replace('Признак: ', '');
+              featureWeights[featName] = (featureWeights[featName] || 0) + impact.weight;
+            }
+          });
+        });
+
+        // Получаем события для подсчёта лайков
+        const events = await this.getUserEvents(userId);
+        const likesCount = events.filter(e => e.action === 'like').length;
+
+        return {
+          user_id: userId,
+          category_weights: categoryWeights,
+          tag_weights: tagWeights,
+          feature_weights: featureWeights,
+          events_count: events.length,
+          likes_count: likesCount
+        };
+      } catch (fallbackError: any) {
+        console.error('Fallback тоже не сработал:', fallbackError.message);
+      }
       
       // Возвращаем пустой профиль при ошибке
       return {
@@ -105,14 +127,25 @@ export class ClarityRecAdapter {
 
   /**
    * Получить события пользователя
-   * В текущей версии ClarityRec не имеет endpoint для получения событий
-   * Поэтому возвращаем заглушку
+   * Теперь использует новый endpoint в ClarityRec Core
    */
   async getUserEvents(userId: string): Promise<UserJourneyStep[]> {
     try {
-      // Пока возвращаем пустой список, т.к. в ClarityRec нет такого endpoint
-      // В будущем можно добавить endpoint GET /api/v1/users/:user_id/events
-      return [];
+      const response = await axios.get(`${this.baseUrl}/api/v1/users/${userId}/events`, {
+        headers: {
+          'X-API-Key': this.apiKey,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      // Преобразуем события из формата Core в формат XAI
+      return (response.data.events || []).map((event: any) => ({
+        user_id: userId,
+        item_id: event.item_id,
+        action: event.event_type as 'like' | 'view' | 'purchase',
+        timestamp: new Date(event.timestamp),
+        metadata: {}
+      }));
     } catch (error: any) {
       console.error('Ошибка получения событий:', error.message);
       return [];

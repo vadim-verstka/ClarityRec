@@ -342,4 +342,114 @@ export async function registerRoutes(fastify: FastifyInstance, apiKey: string) {
       });
     }
   });
+  
+  /**
+   * GET /api/v1/users/:user_id/profile - Получить профиль пользователя
+   */
+  fastify.get<{ Params: { user_id: string } }>('/api/v1/users/:user_id/profile', {
+    schema: {
+      description: 'Получить профиль пользователя с весами категорий, тегов и признаков',
+      tags: ['Users'],
+      params: {
+        type: 'object',
+        required: ['user_id'],
+        properties: {
+          user_id: { type: 'string' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            user_id: { type: 'string' },
+            category_weights: { type: 'object', additionalProperties: { type: 'number' } },
+            tag_weights: { type: 'object', additionalProperties: { type: 'number' } },
+            feature_weights: { type: 'object', additionalProperties: { type: 'number' } },
+            events_count: { type: 'integer' },
+            likes_count: { type: 'integer' }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        }
+      }
+    },
+    handler: async (request, reply) => {
+      const { user_id } = request.params;
+      
+      // Проверяем существование профиля
+      const profile = store.getUserProfile(user_id);
+      
+      if (profile.events_count === 0 && profile.likes_count === 0) {
+        return reply.code(404).send({
+          error: 'User not found',
+          message: `User ${user_id} has no events or profile data`
+        });
+      }
+      
+      return reply.send({
+        user_id: profile.user_id,
+        category_weights: profile.category_weights,
+        tag_weights: profile.tag_weights,
+        feature_weights: profile.feature_weights,
+        events_count: profile.events_count,
+        likes_count: profile.likes_count
+      });
+    }
+  });
+  
+  /**
+   * GET /api/v1/users/:user_id/events - Получить события пользователя
+   */
+  fastify.get<{ Params: { user_id: string } }>('/api/v1/users/:user_id/events', {
+    schema: {
+      description: 'Получить историю событий пользователя',
+      tags: ['Users'],
+      params: {
+        type: 'object',
+        required: ['user_id'],
+        properties: {
+          user_id: { type: 'string' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            user_id: { type: 'string' },
+            events: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  item_id: { type: 'string' },
+                  event_type: { type: 'string' },
+                  timestamp: { type: 'string', format: 'date-time' }
+                }
+              }
+            },
+            total_count: { type: 'integer' }
+          }
+        }
+      }
+    },
+    handler: async (request, reply) => {
+      const { user_id } = request.params;
+      
+      const profile = store.getUserProfile(user_id);
+      
+      return reply.send({
+        user_id,
+        events: profile.events.map(e => ({
+          item_id: e.item_id,
+          event_type: e.event_type,
+          timestamp: e.timestamp.toISOString()
+        })),
+        total_count: profile.events.length
+      });
+    }
+  });
 }
