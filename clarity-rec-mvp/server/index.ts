@@ -2,9 +2,14 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import bcrypt from 'bcrypt';
+import axios from 'axios';
 import db from './db.js';
 
 const fastify = Fastify({ logger: true });
+
+// Конфигурация сервиса рекомендаций ClarityRec Core
+const CORE_SERVICE_URL = process.env.CORE_SERVICE_URL || 'http://clarityrec-core:3000';
+const API_KEY = process.env.API_KEY || 'clarity-rec-mvp-key';
 
 // Регистрация CORS
 fastify.register(cors, {
@@ -132,7 +137,30 @@ fastify.post('/api/likes', {
   const { cardId } = request.body as { cardId: number };
 
   try {
+    // Получаем информацию о карточке
+    const card = db.prepare('SELECT category FROM cards WHERE id = ?').get(cardId) as { category: string } | undefined;
+    if (!card) {
+      return reply.code(404).send({ error: 'Карточка не найдена' });
+    }
+
     db.prepare('INSERT INTO likes (user_id, card_id) VALUES (?, ?)').run(user.id, cardId);
+
+    // Отправляем событие в ClarityRec Core
+    try {
+      await axios.post(`${CORE_SERVICE_URL}/api/v1/events`, {
+        api_key: API_KEY,
+        user_id: `user_${user.id}`,
+        item_id: `card_${cardId}`,
+        event_type: 'like',
+        metadata: {
+          category: card.category
+        }
+      });
+      fastify.log.info(`Событие лайка отправлено в ClarityRec Core для пользователя ${user.id}`);
+    } catch (coreError: any) {
+      fastify.log.warn(`Не удалось отправить событие в ClarityRec Core: ${coreError.message}`);
+      // Не прерываем операцию, если сервис рекомендаций недоступен
+    }
 
     // Проверяем количество лайков
     const likeCount = db.prepare('SELECT COUNT(*) as cnt FROM likes WHERE user_id = ?').get(user.id) as { cnt: number };
@@ -140,6 +168,25 @@ fastify.post('/api/likes', {
     // Если >= 5 лайков, устанавливаем флаг готовности рекомендаций
     if (likeCount.cnt >= 5) {
       db.prepare('UPDATE users SET is_recommendation_ready = 1 WHERE id = ?').run(user.id);
+      
+      // Синхронизируем каталог с ClarityRec Core при достижении порога
+      try {
+        const allCards = db.prepare('SELECT id, category FROM cards').all() as Array<{ id: number; category: string }>;
+        const catalogItems = allCards.map(c => ({
+          item_id: `card_${c.id}`,
+          categories: [c.category],
+          tags: [],
+          features: {}
+        }));
+        
+        await axios.post(`${CORE_SERVICE_URL}/api/v1/catalog/sync`, {
+          api_key: API_KEY,
+          items: catalogItems
+        });
+        fastify.log.info(`Каталог синхронизирован с ClarityRec Core (${catalogItems.length} элементов)`);
+      } catch (syncError: any) {
+        fastify.log.warn(`Не удалось синхронизировать каталог: ${syncError.message}`);
+      }
     }
 
     return { success: true, likeCount: likeCount.cnt };
@@ -166,7 +213,7 @@ fastify.get('/api/likes/count', {
 
 // ==================== RECOMMENDATIONS (заглушка под будущий XAI) ====================
 
-// TODO: ClarityRec Core Integration - эндпоинт для получения рекомендаций
+// Получение персональных рекомендаций через ClarityRec Core
 fastify.get('/api/recommend', {
   preHandler: [fastify.authenticate]
 }, async (request, reply) => {
@@ -181,20 +228,97 @@ fastify.get('/api/recommend', {
     return reply.code(400).send({ error: 'Рекомендации ещё не сформированы. Необходимо минимум 5 лайков.' });
   }
 
-  // TODO: ClarityRec Core Integration - здесь будет вызов ML-модели для генерации рекомендаций
-  // Пока возвращаем заглушку
-  return {
-    ready: true,
-    message: 'Рекомендации сформированы',
-    // В будущем здесь будут реальные рекомендации от XAI-модуля
-    recommendations: [
-      { category: 'Технологии', score: 0.95, reason: 'Вы часто лайкали карточки этой категории' },
-      { category: 'Образование', score: 0.87, reason: 'Вы проявили интерес к образовательному контенту' }
-    ]
-  };
+  try {
+    // Запрашиваем рекомендации у ClarityRec Core
+    const coreResponse = await axios.post(`${CORE_SERVICE_URL}/api/v1/recommend`, {
+      api_key: API_KEY,
+      user_id: `user_${user.id}`,
+      limit: 10,
+      context: {
+        device: 'web',
+        role: 'user'
+      }
+    });
+
+    const recommendations = coreResponse.data.recommendations || [];
+    
+    // Преобразуем рекомендации в формат для фронтенда
+    const recommendedCards = recommendations.map((rec: any) => {
+      // Извлекаем ID карточки из item_id (формат: card_123)
+      const cardId = parseInt(rec.item_id.replace('card_', ''), 10);
+      
+      // Получаем информацию о карточке из БД
+      const card = db.prepare('SELECT id, title, category, image_url FROM cards WHERE id = ?').get(cardId) as any;
+      
+      if (!card) {
+        return null;
+      }
+
+      // Формируем объяснение на основе feature_impacts
+      let explanation = '';
+      if (rec.feature_impacts && rec.feature_impacts.length > 0) {
+        const topImpacts = rec.feature_impacts
+          .filter((imp: any) => imp.direction === 'positive')
+          .slice(0, 2)
+          .map((imp: any) => `${imp.name} (${Math.round(imp.weight * 100)}%)`);
+        
+        if (topImpacts.length > 0) {
+          explanation = `Рекомендовано потому что: ${topImpacts.join(', ')}`;
+        }
+      }
+
+      return {
+        ...card,
+        score: rec.score,
+        explanation,
+        feature_impacts: rec.feature_impacts || []
+      };
+    }).filter(Boolean);
+
+    return {
+      ready: true,
+      message: 'Рекомендации сформированы',
+      request_id: coreResponse.data.request_id,
+      meta: coreResponse.data.meta,
+      recommendations: recommendedCards
+    };
+  } catch (coreError: any) {
+    fastify.log.error(`Ошибка при получении рекомендаций из ClarityRec Core: ${coreError.message}`);
+    
+    // Fallback: возвращаем популярные карточки на основе лайков пользователя
+    const likedCategories = db.prepare(`
+      SELECT c.category, COUNT(*) as cnt 
+      FROM likes l 
+      JOIN cards c ON l.card_id = c.id 
+      WHERE l.user_id = ? 
+      GROUP BY c.category 
+      ORDER BY cnt DESC
+    `).all(user.id) as Array<{ category: string; cnt: number }>;
+
+    const topCategory = likedCategories[0]?.category;
+    
+    const fallbackCards = db.prepare(`
+      SELECT id, title, category, image_url 
+      FROM cards 
+      WHERE category = ? 
+      AND id NOT IN (SELECT card_id FROM likes WHERE user_id = ?)
+      LIMIT 10
+    `).all(topCategory || 'Технологии', user.id) as any[];
+
+    return {
+      ready: true,
+      message: 'Рекомендации сформированы (fallback режим)',
+      recommendations: fallbackCards.map(card => ({
+        ...card,
+        score: 0.5,
+        explanation: 'Рекомендовано на основе ваших предпочтений',
+        feature_impacts: []
+      }))
+    };
+  }
 });
 
-// TODO: ClarityRec Core Integration - эндпоинт для объяснения рекомендаций (XAI)
+// Получение объяснения рекомендаций через ClarityRec Core (XAI)
 fastify.get('/api/explain', {
   preHandler: [fastify.authenticate]
 }, async (request, reply) => {
@@ -203,16 +327,99 @@ fastify.get('/api/explain', {
     return reply.code(403).send({ error: 'Доступ только для пользователей' });
   }
 
-  // TODO: ClarityRec Core Integration - здесь будет логика объяснения рекомендаций от XAI-модуля
-  // Пока возвращаем заглушку
-  return {
-    explanation: 'Наши рекомендации основаны на ваших предпочтениях. Вы показали высокий интерес к категориям: Технологии и Образование.',
-    factors: [
-      { name: 'Частота лайков', weight: 0.4 },
-      { name: 'Разнообразие категорий', weight: 0.3 },
-      { name: 'Время взаимодействия', weight: 0.3 }
-    ]
-  };
+  const userData = db.prepare('SELECT is_recommendation_ready FROM users WHERE id = ?').get(user.id) as any;
+
+  if (!userData.is_recommendation_ready) {
+    return reply.code(400).send({ error: 'Рекомендации ещё не сформированы. Необходимо минимум 5 лайков.' });
+  }
+
+  try {
+    // Получаем последние рекомендации для объяснения
+    const coreResponse = await axios.post(`${CORE_SERVICE_URL}/api/v1/recommend`, {
+      api_key: API_KEY,
+      user_id: `user_${user.id}`,
+      limit: 5,
+      context: {
+        device: 'web',
+        role: 'user'
+      }
+    });
+
+    const recommendations = coreResponse.data.recommendations || [];
+    
+    // Анализируем feature_impacts для формирования общего объяснения
+    const allImpacts: Record<string, number> = {};
+    recommendations.forEach((rec: any) => {
+      if (rec.feature_impacts) {
+        rec.feature_impacts.forEach((imp: any) => {
+          if (imp.direction === 'positive') {
+            allImpacts[imp.name] = (allImpacts[imp.name] || 0) + imp.weight;
+          }
+        });
+      }
+    });
+
+    // Сортируем факторы по весу
+    const sortedFactors = Object.entries(allImpacts)
+      .map(([name, weight]) => ({ name, weight: weight / recommendations.length }))
+      .sort((a, b) => b.weight - a.weight);
+
+    // Формируем текстовое объяснение
+    let explanationText = 'Наши рекомендации основаны на анализе ваших предпочтений. ';
+    if (sortedFactors.length > 0) {
+      const topFactors = sortedFactors.slice(0, 3).map(f => `${f.name} (${Math.round(f.weight * 100)}%)`);
+      explanationText += `Основные факторы: ${topFactors.join(', ')}. `;
+    }
+    explanationText += 'Система проанализировала ваши лайки и подобрала контент, который соответствует вашим интересам.';
+
+    // Получаем статистику по категориям
+    const categoryStats = db.prepare(`
+      SELECT c.category, COUNT(*) as cnt 
+      FROM likes l 
+      JOIN cards c ON l.card_id = c.id 
+      WHERE l.user_id = ? 
+      GROUP BY c.category 
+      ORDER BY cnt DESC
+    `).all(user.id) as Array<{ category: string; cnt: number }>;
+
+    return {
+      explanation: explanationText,
+      factors: sortedFactors,
+      category_preferences: categoryStats,
+      meta: {
+        model_version: coreResponse.data.meta?.model_version || '1.0.0',
+        total_events: coreResponse.data.meta?.total_events || 0
+      }
+    };
+  } catch (coreError: any) {
+    fastify.log.error(`Ошибка при получении объяснения из ClarityRec Core: ${coreError.message}`);
+    
+    // Fallback объяснение
+    const categoryStats = db.prepare(`
+      SELECT c.category, COUNT(*) as cnt 
+      FROM likes l 
+      JOIN cards c ON l.card_id = c.id 
+      WHERE l.user_id = ? 
+      GROUP BY c.category 
+      ORDER BY cnt DESC
+    `).all(user.id) as Array<{ category: string; cnt: number }>;
+
+    const topCategory = categoryStats[0]?.category;
+
+    return {
+      explanation: `Наши рекомендации основаны на ваших предпочтениях. Вы проявили наибольший интерес к категории "${topCategory}". Система продолжит учиться на ваших действиях, чтобы улучшить рекомендации.`,
+      factors: [
+        { name: 'Частота лайков', weight: 0.4 },
+        { name: 'Разнообразие категорий', weight: 0.3 },
+        { name: 'Последняя активность', weight: 0.3 }
+      ],
+      category_preferences: categoryStats,
+      meta: {
+        model_version: 'fallback-1.0.0',
+        total_events: categoryStats.reduce((sum, s) => sum + s.cnt, 0)
+      }
+    };
+  }
 });
 
 // Запуск сервера
