@@ -53,7 +53,7 @@ docker compose up --build
 
 **Админ:**
 - Логин: `admin`
-- Пароль: `admin123`
+- Пароль: `cradmin123`
 
 **API-ключ ClarityRec Core:** `clarity-rec-demo-api-key-2024`
 
@@ -200,7 +200,7 @@ curl -X POST http://localhost/core-api/recommend \
 ## 📝 Примечания
 
 - База данных SQLite создаётся автоматически при первом запуске
-- Админ `admin` создаётся автоматически с паролем `admin123`
+- Админ `admin` создаётся автоматически с паролем `cradmin123`
 - 30 моковых карточек генерируются при первом запуске
 - JWT токен хранится в localStorage, срок действия — 7 дней
 - ClarityRec Core хранит данные в памяти (при перезапуске данные теряются)

@@ -49,9 +49,9 @@ db.exec(`
 async function initAdmin() {
   const adminExists = db.prepare('SELECT id FROM admin WHERE username = ?').get('admin');
   if (!adminExists) {
-    const passwordHash = await bcrypt.hash('admin123', 10);
+    const passwordHash = await bcrypt.hash('cradmin123', 10);
     db.prepare('INSERT INTO admin (username, password_hash) VALUES (?, ?)').run('admin', passwordHash);
-    console.log('✅ Админ создан: admin / admin123');
+    console.log('✅ Админ создан: admin / cradmin123');
   }
 }
 
