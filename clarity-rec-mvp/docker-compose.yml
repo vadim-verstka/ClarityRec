@@ -13,8 +13,12 @@ services:
       - NODE_ENV=production
       - JWT_SECRET=clarity-rec-secret-key-mvp-2024
       - DB_PATH=/app/data/clarityrec.db
+      - CORE_SERVICE_URL=http://clarityrec-core:3001
+      - API_KEY=clarity-rec-demo-api-key-2024
     volumes:
       - db-data:/app/data
+    depends_on:
+      - clarityrec-core
     restart: unless-stopped
 
   # Микросервис рекомендаций ClarityRec Core

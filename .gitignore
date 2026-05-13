@@ -1,17 +1,19 @@
 ```
 # Dependencies
 node_modules/
-package-lock.json
+
+# Build artifacts
+dist/
+build/
+target/
+
+# Logs
+*.log
 
 # Environment
 .env
 .env.local
-.env.*
-
-# Logs and temp files
-*.log
-*.tmp
-*.swp
+*.env.*
 
 # Editors
 .vscode/
