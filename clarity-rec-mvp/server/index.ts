@@ -148,12 +148,15 @@ fastify.post('/api/likes', {
     // Отправляем событие в ClarityRec Core
     try {
       await axios.post(`${CORE_SERVICE_URL}/api/v1/events`, {
-        api_key: API_KEY,
         user_id: `user_${user.id}`,
         item_id: `card_${cardId}`,
         event_type: 'like',
         metadata: {
           category: card.category
+        }
+      }, {
+        headers: {
+          'X-API-Key': API_KEY
         }
       });
       fastify.log.info(`Событие лайка отправлено в ClarityRec Core для пользователя ${user.id}`);
@@ -180,8 +183,11 @@ fastify.post('/api/likes', {
         }));
         
         await axios.post(`${CORE_SERVICE_URL}/api/v1/catalog/sync`, {
-          api_key: API_KEY,
           items: catalogItems
+        }, {
+          headers: {
+            'X-API-Key': API_KEY
+          }
         });
         fastify.log.info(`Каталог синхронизирован с ClarityRec Core (${catalogItems.length} элементов)`);
       } catch (syncError: any) {
@@ -231,12 +237,15 @@ fastify.get('/api/recommendations', {
   try {
     // Запрашиваем рекомендации у ClarityRec Core
     const coreResponse = await axios.post(`${CORE_SERVICE_URL}/api/v1/recommend`, {
-      api_key: API_KEY,
       user_id: `user_${user.id}`,
       limit: 10,
       context: {
         device: 'web',
         role: 'user'
+      }
+    }, {
+      headers: {
+        'X-API-Key': API_KEY
       }
     });
 
@@ -336,12 +345,15 @@ fastify.get('/api/explain', {
   try {
     // Получаем последние рекомендации для объяснения
     const coreResponse = await axios.post(`${CORE_SERVICE_URL}/api/v1/recommend`, {
-      api_key: API_KEY,
       user_id: `user_${user.id}`,
       limit: 5,
       context: {
         device: 'web',
         role: 'user'
+      }
+    }, {
+      headers: {
+        'X-API-Key': API_KEY
       }
     });
 
