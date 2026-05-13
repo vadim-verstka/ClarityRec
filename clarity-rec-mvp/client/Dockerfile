@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build-stage
+FROM node:20 AS build-stage
 
 WORKDIR /app
 
@@ -7,11 +7,11 @@ RUN npm install
 
 COPY . .
 
-# Явная переустановка vue-tsc для корректной работы в alpine
+# Явная переустановка vue-tsc для корректной работы
 RUN npm install --save-dev vue-tsc typescript
 
 # Сборка проекта
-RUN ./node_modules/.bin/vue-tsc --noEmit && ./node_modules/.bin/vite build
+RUN npx vue-tsc --noEmit && npx vite build
 
 FROM nginx:alpine AS production-stage
 
