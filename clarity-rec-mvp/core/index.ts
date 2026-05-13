@@ -67,7 +67,7 @@ async function main() {
   });
 
   // Получение API-ключа из переменных окружения
-  const apiKey = process.env.API_KEY || 'clarity-rec-demo-api-key-2024';
+  const apiKey = process.env.CLARITYREC_API_KEY || 'clarity-rec-secret-key-2024';
   
   logger.info('🔑 API Key configured');
 
