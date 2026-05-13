@@ -105,14 +105,16 @@ const validateCatalogSync = ajv.compile(catalogSyncSchema);
  */
 export async function registerRoutes(fastify: FastifyInstance, apiKey: string) {
   
-  // Middleware для проверки API-ключа
+  // Middleware для проверки API-ключа (теперь берем из тела запроса)
   fastify.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
     // Пропускаем проверку для Swagger и healthcheck
-    if (request.url.startsWith('/documentation') || request.url === '/health') {
+    if (request.url.startsWith('/documentation') || request.url === '/health' || request.url.startsWith('/docs')) {
       return;
     }
     
-    const providedKey = request.headers['x-api-key'] as string;
+    // Получаем API-ключ из тела запроса
+    const body = request.body as any;
+    const providedKey = body?.api_key;
     
     if (!providedKey || !verifyApiKey(providedKey, apiKey)) {
       reply.code(403).send({ 
