@@ -39,7 +39,7 @@
       <div class="hint">
         <p>💡 Для входа используйте:</p>
         <p><strong>Логин:</strong> admin</p>
-        <p><strong>Пароль:</strong> admin123</p>
+        <p><strong>Пароль:</strong> cradmin123</p>
       </div>
     </div>
   </div>
