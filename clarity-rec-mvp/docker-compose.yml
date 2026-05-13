@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # Основной бэкенд приложения (аутентификация, пользователи, UI)
   backend:
     build:
       context: ./server
@@ -15,6 +16,25 @@ services:
     volumes:
       - db-data:/app/data
     restart: unless-stopped
+
+  # Микросервис рекомендаций ClarityRec Core
+  clarityrec-core:
+    build:
+      context: ./core
+      dockerfile: Dockerfile
+    container_name: clarity-rec-core
+    ports:
+      - "3001:3001"
+    environment:
+      - API_KEY=clarity-rec-demo-api-key-2024
+      - NODE_ENV=production
+      - CORS_ORIGINS=*
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
 
   frontend:
     build:
@@ -35,6 +55,7 @@ services:
     depends_on:
       - backend
       - frontend
+      - clarityrec-core
     restart: unless-stopped
 
 volumes:
