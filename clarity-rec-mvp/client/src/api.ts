@@ -59,7 +59,7 @@ export const recommendationsApi = {
 };
 
 export const recommendApi = {
-  getRecommendations: () => api.get('/recommend'),
+  getRecommendations: () => api.get('/recommendations'),
   getExplanation: () => api.get('/explain')
 };
 

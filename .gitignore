@@ -1,51 +1,57 @@
 ```
-# Compiled and build artifacts
-*.js
-dist/
-build/
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.a
-*.out
+# Database
+clarity-rec-mvp/server/data/clarityrec.db
 
 # Dependencies
 node_modules/
 .venv/
 venv/
 __pycache__/
-.mypy_cache/
-.pytest_cache/
-target/
-.gradle/
 
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-*.swo
+# Build artifacts
+dist/
+build/
+target/
 
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
 
 # Editors
 .vscode/
 .idea/
 
-# System files
+# Logs
+*.log
+
+# OS
 .DS_Store
 Thumbs.db
 
+# Python
+*.pyc
+*.pyo
+*.pyd
+*.py~
+*.pyc~
+*.pyo~
+*.pyd~
+*.py~
+*.pyc~
+*.pyo~
+*.pyd~
+
 # Coverage
+.coverage
 coverage/
 htmlcov/
-.coverage
 
-# Compressed files
+# Testing
+.pytest_cache/
+.mypy_cache/
+
+# Compressed
 *.zip
 *.gz
 *.tar
