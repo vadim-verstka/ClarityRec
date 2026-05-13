@@ -468,6 +468,78 @@ fastify.get('/api/explain', {
   }
 });
 
+// ==================== XAI MODULE PROXY ENDPOINTS ====================
+
+// Получить полное объяснение от XAI модуля
+fastify.get('/api/xai/:userId/explanation', {
+  preHandler: [fastify.authenticate]
+}, async (request, reply) => {
+  const { userId } = request.params as { userId: string };
+  const user = request.user as any;
+  
+  // Проверка: админ может смотреть любого пользователя, пользователь только себя
+  if (user.role === 'user' && `user_${user.id}` !== userId) {
+    return reply.code(403).send({ error: 'Доступ запрещён' });
+  }
+
+  try {
+    const xaiResponse = await axios.get(`${process.env.XAI_MODULE_URL || 'http://clarity-rec-xai-module:3002'}/api/explain/${userId}`);
+    return xaiResponse.data;
+  } catch (error: any) {
+    fastify.log.error(`Ошибка получения объяснения от XAI: ${error.message}`);
+    return reply.code(500).send({ 
+      error: 'XAI module unavailable',
+      message: error.message 
+    });
+  }
+});
+
+// Получить визуализации от XAI модуля
+fastify.get('/api/xai/:userId/visualizations', {
+  preHandler: [fastify.authenticate]
+}, async (request, reply) => {
+  const { userId } = request.params as { userId: string };
+  const user = request.user as any;
+  
+  if (user.role === 'user' && `user_${user.id}` !== userId) {
+    return reply.code(403).send({ error: 'Доступ запрещён' });
+  }
+
+  try {
+    const xaiResponse = await axios.get(`${process.env.XAI_MODULE_URL || 'http://clarity-rec-xai-module:3002'}/api/visualizations/${userId}`);
+    return xaiResponse.data;
+  } catch (error: any) {
+    fastify.log.error(`Ошибка получения визуализаций от XAI: ${error.message}`);
+    return reply.code(500).send({ 
+      error: 'XAI module unavailable',
+      message: error.message 
+    });
+  }
+});
+
+// Получить факторы влияния от XAI модуля
+fastify.get('/api/xai/:userId/factors', {
+  preHandler: [fastify.authenticate]
+}, async (request, reply) => {
+  const { userId } = request.params as { userId: string };
+  const user = request.user as any;
+  
+  if (user.role === 'user' && `user_${user.id}` !== userId) {
+    return reply.code(403).send({ error: 'Доступ запрещён' });
+  }
+
+  try {
+    const xaiResponse = await axios.get(`${process.env.XAI_MODULE_URL || 'http://clarity-rec-xai-module:3002'}/api/factors/${userId}`);
+    return xaiResponse.data;
+  } catch (error: any) {
+    fastify.log.error(`Ошибка получения факторов от XAI: ${error.message}`);
+    return reply.code(500).send({ 
+      error: 'XAI module unavailable',
+      message: error.message 
+    });
+  }
+});
+
 // Запуск сервера
 const start = async () => {
   try {

@@ -6,8 +6,8 @@ import axios from 'axios';
 import db from './db.js';
 const fastify = Fastify({ logger: true });
 // Конфигурация сервиса рекомендаций ClarityRec Core
-const CORE_SERVICE_URL = process.env.CORE_SERVICE_URL || 'http://clarityrec-core:3000';
-const API_KEY = process.env.API_KEY || 'clarity-rec-mvp-key';
+const CORE_SERVICE_URL = process.env.CORE_SERVICE_URL || 'http://clarityrec-core:3001';
+const API_KEY = process.env.CLARITYREC_API_KEY || 'clarity-rec-secret-key-2024';
 // Регистрация CORS
 fastify.register(cors, {
     origin: '*',
@@ -241,7 +241,7 @@ fastify.get('/api/recommendations', {
     }
     catch (coreError) {
         fastify.log.error(`Ошибка при получении рекомендаций из ClarityRec Core: ${coreError.message}`);
-        // Fallback: возвращаем популярные карточки на основе лайков пользователя
+        // Fallback: возвращаем карточки из всех лайкнутых категорий + случайные из нелайкнутых
         const likedCategories = db.prepare(`
       SELECT c.category, COUNT(*) as cnt 
       FROM likes l 
@@ -250,18 +250,46 @@ fastify.get('/api/recommendations', {
       GROUP BY c.category 
       ORDER BY cnt DESC
     `).all(user.id);
-        const topCategory = likedCategories[0]?.category;
-        const fallbackCards = db.prepare(`
-      SELECT id, title, category, image_url 
-      FROM cards 
-      WHERE category = ? 
-      AND id NOT IN (SELECT card_id FROM likes WHERE user_id = ?)
-      LIMIT 10
-    `).all(topCategory || 'Технологии', user.id);
+        const likedCategoryNames = likedCategories.map(lc => lc.category);
+        const resultCards = [];
+        // Добавляем карточки из каждой лайкнутой категории (отсортированы по количеству лайков)
+        for (const lc of likedCategories) {
+            const categoryCards = db.prepare(`
+        SELECT id, title, category, image_url 
+        FROM cards 
+        WHERE category = ? 
+        AND id NOT IN (SELECT card_id FROM likes WHERE user_id = ?)
+        LIMIT 2
+      `).all(lc.category, user.id);
+            resultCards.push(...categoryCards);
+        }
+        // Добавляем 1-2 случайные карточки из нелайкнутых категорий
+        if (likedCategoryNames.length > 0) {
+            const placeholders = likedCategoryNames.map(() => '?').join(',');
+            const randomCards = db.prepare(`
+        SELECT id, title, category, image_url 
+        FROM cards 
+        WHERE category NOT IN (${placeholders})
+        AND id NOT IN (SELECT card_id FROM likes WHERE user_id = ?)
+        ORDER BY RANDOM()
+        LIMIT 2
+      `).all(...likedCategoryNames, user.id);
+            resultCards.push(...randomCards);
+        }
+        else {
+            // Если нет лайкнутых категорий, берём случайные карточки
+            const randomCards = db.prepare(`
+        SELECT id, title, category, image_url 
+        FROM cards 
+        ORDER BY RANDOM()
+        LIMIT 10
+      `).all();
+            resultCards.push(...randomCards);
+        }
         return {
             ready: true,
             message: 'Рекомендации сформированы (fallback режим)',
-            recommendations: fallbackCards.map(card => ({
+            recommendations: resultCards.map(card => ({
                 ...card,
                 score: 0.5,
                 explanation: 'Рекомендовано на основе ваших предпочтений',
@@ -270,7 +298,7 @@ fastify.get('/api/recommendations', {
         };
     }
 });
-// Получение объяснения рекомендаций через ClarityRec Core (XAI)
+// Получение объяснения рекомендаций через XAI Module
 fastify.get('/api/explain', {
     preHandler: [fastify.authenticate]
 }, async (request, reply) => {
@@ -283,83 +311,162 @@ fastify.get('/api/explain', {
         return reply.code(400).send({ error: 'Рекомендации ещё не сформированы. Необходимо минимум 5 лайков.' });
     }
     try {
-        // Получаем последние рекомендации для объяснения
-        const coreResponse = await axios.post(`${CORE_SERVICE_URL}/api/v1/recommend`, {
-            api_key: API_KEY,
-            user_id: `user_${user.id}`,
-            limit: 5,
-            context: {
-                device: 'web',
-                role: 'user'
+        // Запрашиваем объяснение из XAI Module
+        const xaiResponse = await axios.get(`${process.env.XAI_MODULE_URL || 'http://clarity-rec-xai-module:3002'}/api/explain/user_${user.id}`, {
+            headers: {
+                'Content-Type': 'application/json'
             }
         });
-        const recommendations = coreResponse.data.recommendations || [];
-        // Анализируем feature_impacts для формирования общего объяснения
-        const allImpacts = {};
-        recommendations.forEach((rec) => {
-            if (rec.feature_impacts) {
-                rec.feature_impacts.forEach((imp) => {
-                    if (imp.direction === 'positive') {
-                        allImpacts[imp.name] = (allImpacts[imp.name] || 0) + imp.weight;
-                    }
-                });
-            }
-        });
-        // Сортируем факторы по весу
-        const sortedFactors = Object.entries(allImpacts)
-            .map(([name, weight]) => ({ name, weight: weight / recommendations.length }))
-            .sort((a, b) => b.weight - a.weight);
-        // Формируем текстовое объяснение
-        let explanationText = 'Наши рекомендации основаны на анализе ваших предпочтений. ';
-        if (sortedFactors.length > 0) {
-            const topFactors = sortedFactors.slice(0, 3).map(f => `${f.name} (${Math.round(f.weight * 100)}%)`);
-            explanationText += `Основные факторы: ${topFactors.join(', ')}. `;
-        }
-        explanationText += 'Система проанализировала ваши лайки и подобрала контент, который соответствует вашим интересам.';
-        // Получаем статистику по категориям
-        const categoryStats = db.prepare(`
-      SELECT c.category, COUNT(*) as cnt 
-      FROM likes l 
-      JOIN cards c ON l.card_id = c.id 
-      WHERE l.user_id = ? 
-      GROUP BY c.category 
-      ORDER BY cnt DESC
-    `).all(user.id);
-        return {
-            explanation: explanationText,
-            factors: sortedFactors,
-            category_preferences: categoryStats,
-            meta: {
-                model_version: coreResponse.data.meta?.model_version || '1.0.0',
-                total_events: coreResponse.data.meta?.total_events || 0
-            }
-        };
+        return xaiResponse.data;
     }
-    catch (coreError) {
-        fastify.log.error(`Ошибка при получении объяснения из ClarityRec Core: ${coreError.message}`);
-        // Fallback объяснение
-        const categoryStats = db.prepare(`
-      SELECT c.category, COUNT(*) as cnt 
-      FROM likes l 
-      JOIN cards c ON l.card_id = c.id 
-      WHERE l.user_id = ? 
-      GROUP BY c.category 
-      ORDER BY cnt DESC
-    `).all(user.id);
-        const topCategory = categoryStats[0]?.category;
-        return {
-            explanation: `Наши рекомендации основаны на ваших предпочтениях. Вы проявили наибольший интерес к категории "${topCategory}". Система продолжит учиться на ваших действиях, чтобы улучшить рекомендации.`,
-            factors: [
-                { name: 'Частота лайков', weight: 0.4 },
-                { name: 'Разнообразие категорий', weight: 0.3 },
-                { name: 'Последняя активность', weight: 0.3 }
-            ],
-            category_preferences: categoryStats,
-            meta: {
-                model_version: 'fallback-1.0.0',
-                total_events: categoryStats.reduce((sum, s) => sum + s.cnt, 0)
+    catch (xaiError) {
+        fastify.log.warn(`XAI Module недоступен (${xaiError.message}), используем fallback`);
+        // Fallback: получаем рекомендации из Core и формируем объяснение локально
+        try {
+            const coreResponse = await axios.post(`${CORE_SERVICE_URL}/api/v1/recommend`, {
+                api_key: API_KEY,
+                user_id: `user_${user.id}`,
+                limit: 5,
+                context: {
+                    device: 'web',
+                    role: 'user'
+                }
+            });
+            const recommendations = coreResponse.data.recommendations || [];
+            // Анализируем feature_impacts для формирования общего объяснения
+            const allImpacts = {};
+            recommendations.forEach((rec) => {
+                if (rec.feature_impacts) {
+                    rec.feature_impacts.forEach((imp) => {
+                        if (imp.direction === 'positive') {
+                            allImpacts[imp.name] = (allImpacts[imp.name] || 0) + imp.weight;
+                        }
+                    });
+                }
+            });
+            // Сортируем факторы по весу
+            const sortedFactors = Object.entries(allImpacts)
+                .map(([name, weight]) => ({ name, weight: weight / recommendations.length }))
+                .sort((a, b) => b.weight - a.weight);
+            // Формируем текстовое объяснение
+            let explanationText = 'Наши рекомендации основаны на анализе ваших предпочтений. ';
+            if (sortedFactors.length > 0) {
+                const topFactors = sortedFactors.slice(0, 3).map(f => `${f.name} (${Math.round(f.weight * 100)}%)`);
+                explanationText += `Основные факторы: ${topFactors.join(', ')}. `;
             }
-        };
+            explanationText += 'Система проанализировала ваши лайки и подобрала контент, который соответствует вашим интересам.';
+            // Получаем статистику по категориям
+            const categoryStats = db.prepare(`
+        SELECT c.category, COUNT(*) as cnt 
+        FROM likes l 
+        JOIN cards c ON l.card_id = c.id 
+        WHERE l.user_id = ? 
+        GROUP BY c.category 
+        ORDER BY cnt DESC
+      `).all(user.id);
+            return {
+                explanation: explanationText,
+                factors: sortedFactors,
+                category_preferences: categoryStats,
+                meta: {
+                    model_version: coreResponse.data.meta?.model_version || '1.0.0',
+                    total_events: coreResponse.data.meta?.total_events || 0,
+                    source: 'fallback'
+                }
+            };
+        }
+        catch (coreError) {
+            fastify.log.error(`Ошибка при получении объяснения: ${coreError.message}`);
+            // Полный fallback без Core
+            const categoryStats = db.prepare(`
+        SELECT c.category, COUNT(*) as cnt 
+        FROM likes l 
+        JOIN cards c ON l.card_id = c.id 
+        WHERE l.user_id = ? 
+        GROUP BY c.category 
+        ORDER BY cnt DESC
+      `).all(user.id);
+            const topCategory = categoryStats[0]?.category;
+            return {
+                explanation: `Наши рекомендации основаны на ваших предпочтениях. Вы проявили наибольший интерес к категории "${topCategory}". Система продолжит учиться на ваших действиях, чтобы улучшить рекомендации.`,
+                factors: [
+                    { name: 'Частота лайков', weight: 0.4 },
+                    { name: 'Разнообразие категорий', weight: 0.3 },
+                    { name: 'Последняя активность', weight: 0.3 }
+                ],
+                category_preferences: categoryStats,
+                meta: {
+                    model_version: 'fallback-1.0.0',
+                    total_events: categoryStats.reduce((sum, s) => sum + s.cnt, 0),
+                    source: 'local-fallback'
+                }
+            };
+        }
+    }
+});
+// ==================== XAI MODULE PROXY ENDPOINTS ====================
+// Получить полное объяснение от XAI модуля
+fastify.get('/api/xai/:userId/explanation', {
+    preHandler: [fastify.authenticate]
+}, async (request, reply) => {
+    const { userId } = request.params;
+    const user = request.user;
+    // Проверка: админ может смотреть любого пользователя, пользователь только себя
+    if (user.role === 'user' && `user_${user.id}` !== userId) {
+        return reply.code(403).send({ error: 'Доступ запрещён' });
+    }
+    try {
+        const xaiResponse = await axios.get(`${process.env.XAI_MODULE_URL || 'http://clarity-rec-xai-module:3002'}/api/explain/${userId}`);
+        return xaiResponse.data;
+    }
+    catch (error) {
+        fastify.log.error(`Ошибка получения объяснения от XAI: ${error.message}`);
+        return reply.code(500).send({
+            error: 'XAI module unavailable',
+            message: error.message
+        });
+    }
+});
+// Получить визуализации от XAI модуля
+fastify.get('/api/xai/:userId/visualizations', {
+    preHandler: [fastify.authenticate]
+}, async (request, reply) => {
+    const { userId } = request.params;
+    const user = request.user;
+    if (user.role === 'user' && `user_${user.id}` !== userId) {
+        return reply.code(403).send({ error: 'Доступ запрещён' });
+    }
+    try {
+        const xaiResponse = await axios.get(`${process.env.XAI_MODULE_URL || 'http://clarity-rec-xai-module:3002'}/api/visualizations/${userId}`);
+        return xaiResponse.data;
+    }
+    catch (error) {
+        fastify.log.error(`Ошибка получения визуализаций от XAI: ${error.message}`);
+        return reply.code(500).send({
+            error: 'XAI module unavailable',
+            message: error.message
+        });
+    }
+});
+// Получить факторы влияния от XAI модуля
+fastify.get('/api/xai/:userId/factors', {
+    preHandler: [fastify.authenticate]
+}, async (request, reply) => {
+    const { userId } = request.params;
+    const user = request.user;
+    if (user.role === 'user' && `user_${user.id}` !== userId) {
+        return reply.code(403).send({ error: 'Доступ запрещён' });
+    }
+    try {
+        const xaiResponse = await axios.get(`${process.env.XAI_MODULE_URL || 'http://clarity-rec-xai-module:3002'}/api/factors/${userId}`);
+        return xaiResponse.data;
+    }
+    catch (error) {
+        fastify.log.error(`Ошибка получения факторов от XAI: ${error.message}`);
+        return reply.code(500).send({
+            error: 'XAI module unavailable',
+            message: error.message
+        });
     }
 });
 // Запуск сервера

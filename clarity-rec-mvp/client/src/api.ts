@@ -62,3 +62,9 @@ export const recommendApi = {
   getRecommendations: () => api.get('/recommend'),
   getExplanation: () => api.get('/explain')
 };
+
+export const xaiApi = {
+  getExplanation: (userId: string) => api.get(`/xai/${userId}/explanation`),
+  getVisualizations: (userId: string) => api.get(`/xai/${userId}/visualizations`),
+  getFactors: (userId: string) => api.get(`/xai/${userId}/factors`)
+};
