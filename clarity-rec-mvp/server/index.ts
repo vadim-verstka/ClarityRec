@@ -8,7 +8,7 @@ import db from './db.js';
 const fastify = Fastify({ logger: true });
 
 // Конфигурация сервиса рекомендаций ClarityRec Core
-const CORE_SERVICE_URL = process.env.CORE_SERVICE_URL || 'http://clarityrec-core:3001';
+const CORE_SERVICE_URL = process.env.CORE_SERVICE_URL || 'http://clarityrec-core:3000';
 const API_KEY = process.env.CLARITYREC_API_KEY || 'clarity-rec-secret-key-2024';
 
 // Регистрация CORS
