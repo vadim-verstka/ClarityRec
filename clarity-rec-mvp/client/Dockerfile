@@ -6,7 +6,12 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
-RUN npx vue-tsc && npx vite build
+
+# Явная переустановка vue-tsc для корректной работы в alpine
+RUN npm install --save-dev vue-tsc typescript
+
+# Сборка проекта
+RUN ./node_modules/.bin/vue-tsc --noEmit && ./node_modules/.bin/vite build
 
 FROM nginx:alpine AS production-stage
 
